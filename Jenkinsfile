@@ -274,40 +274,37 @@
 
 
 
-
-
 pipeline {
   agent any
 
-  // Conserve uniquement timestamps ici (ansiColor sera appliqué autour des steps)
   options { timestamps() }
 
   tools {
-    // Adapte aux noms de tes tools Jenkins, ou supprime ce bloc si tu utilises une image Docker déjà équipée
-    // maven 'Maven-3'
-    // jdk   'JDK-17'
+    // Ces noms doivent correspondre à ceux configurés dans
+    // "Manage Jenkins" → "Global Tool Configuration"
+    maven 'M2_HOME'      // ton installation Maven (ex: "Maven 3.9.6" ou "mymaven")
+    jdk   'JDK17'        // ton installation Java (ex: "jdk-17" ou "JDK17")
   }
 
   environment {
-    // ====== A ADAPTER ======
-    // 1) SonarQube (nom tel que déclaré in "Manage Jenkins" > "Configure System")
+    // ======== À ADAPTER SELON TON ENVIRONNEMENT ========
+
+    // 🔹 SonarQube
     SONARQUBE_NAME     = 'MySonarQubeServer'
 
-    // 2) Nexus releases repo (URL EXACTE du repository cible)
-    NEXUS_RELEASES_URL = 'http://localhost:8091/repository/maven-releases/'
+    // 🔹 Nexus Repositories
+    NEXUS_RELEASES_URL  = 'http://localhost:8091/repository/maven-releases/'
+    NEXUS_SNAPSHOTS_URL = 'http://localhost:8091/repository/maven-snapshots/'
+    NEXUS_CRED_ID       = 'nexus-creds'  // Jenkins Credentials (user/password Nexus)
 
-    // 3) Credentials IDs créés dans Jenkins (Manage Jenkins > Credentials)
-    NEXUS_CRED_ID      = 'nexus-credentials'     // username/password Nexus
-    TOMCAT_CRED_ID     = 'tomcat-credentials'    // username/password Tomcat Manager
+    // 🔹 Tomcat Manager (facultatif)
+    TOMCAT_CRED_ID      = tomcat-creds'
+    TOMCAT_MANAGER_URL  = 'http://localhost:8090/manager/text'
 
-    // 4) Coordonnées de l’appli
-    APP_NAME    = 'country-service'
-    APP_VERSION = '1.0.0'       // si contient "SNAPSHOT", la phase Nexus Releases est ignorée
-    GROUP_ID    = 'com.example' // groupId utilisé pour publier dans Nexus
-
-    // 5) Tomcat Manager URL (sans credentials)
-    // Exemple: http://localhost:8090/manager/text
-    TOMCAT_MANAGER_URL = 'http://localhost:8090/manager/text'
+    // 🔹 Projet
+    GROUP_ID   = 'com.example'
+    APP_NAME   = 'country-service'
+    APP_VERSION = '1.0.0' // si tu mets "1.0.0-SNAPSHOT", ça ira dans maven-snapshots
   }
 
   stages {
@@ -318,102 +315,97 @@ pipeline {
       }
     }
 
-    stage('Build & Tests (H2 en mémoire)') {
+    stage('Build & Test (H2 in-memory)') {
       steps {
-        ansiColor('xterm') {
-          sh '''
-            set -e
-            mvn -B -U clean test \
-              -Dspring.datasource.url="jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE" \
-              -Dspring.datasource.driver-class-name=org.h2.Driver \
-              -Dspring.datasource.username=sa \
-              -Dspring.datasource.password= \
-              -Dspring.jpa.hibernate.ddl-auto=update \
-              -Dspring.jpa.database-platform=org.hibernate.dialect.MySQLDialect \
-              -Dspring.sql.init.mode=never
+        sh '''
+          set -e
+          mvn -B -U clean test \
+            -Dspring.datasource.url="jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE" \
+            -Dspring.datasource.driver-class-name=org.h2.Driver \
+            -Dspring.datasource.username=sa \
+            -Dspring.datasource.password= \
+            -Dspring.jpa.hibernate.ddl-auto=update \
+            -Dspring.jpa.database-platform=org.hibernate.dialect.MySQLDialect \
+            -Dspring.sql.init.mode=never
 
-            # Package sans relancer les tests
-            mvn -B -U -DskipTests package
-          '''
-        }
+          mvn -B -U -DskipTests package
+        '''
       }
       post {
         always {
-          // Publie les rapports de tests (ne casse pas la build si vide)
           junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
         }
       }
     }
 
     stage('SonarQube Analysis') {
-      // N’exécute cette étape que si SONARQUBE_NAME est défini
       when { expression { return env.SONARQUBE_NAME?.trim() } }
       steps {
         withSonarQubeEnv(env.SONARQUBE_NAME) {
-          ansiColor('xterm') {
-            sh """
-              mvn -B -U -DskipTests sonar:sonar \
-                -Dsonar.projectKey=${GROUP_ID}:${APP_NAME} \
-                -Dsonar.projectName=${APP_NAME} \
-                -Dsonar.projectVersion=${APP_VERSION}
-            """
-          }
+          sh """
+            mvn -B -U -DskipTests sonar:sonar \
+              -Dsonar.projectKey=${GROUP_ID}:${APP_NAME} \
+              -Dsonar.projectName=${APP_NAME} \
+              -Dsonar.projectVersion=${APP_VERSION}
+          """
         }
       }
     }
 
-    stage('Upload to Nexus (releases)') {
-      // On ne déploie dans "releases" que si la version ne contient pas SNAPSHOT
-      when {
-        allOf {
-          expression { return env.APP_VERSION && !env.APP_VERSION.contains('SNAPSHOT') }
-          expression { return env.NEXUS_RELEASES_URL?.trim() }
-        }
-      }
+    stage('Upload to Nexus') {
       steps {
         withCredentials([usernamePassword(credentialsId: env.NEXUS_CRED_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-          ansiColor('xterm') {
-            sh '''
-              set -e
-              echo "Recherche de l’artefact construit..."
-              ART=$(ls target/*.jar 2>/dev/null | head -1)
-              if [ -z "$ART" ]; then
-                echo "Aucun JAR trouvé dans target/. Vérifie le packaging du projet."
-                exit 1
-              fi
-              echo "Artefact: $ART"
+          sh '''
+            set -e
 
-              echo "Création d’un settings.xml temporaire pour Nexus"
-              cat > settings-nexus.xml <<EOF
+            echo "Recherche de l’artefact généré..."
+            ART=$(ls target/*.jar 2>/dev/null | head -1)
+            if [ -z "$ART" ]; then
+              echo "❌ Aucun artefact JAR trouvé dans target/"
+              exit 1
+            fi
+            echo "Artefact trouvé: $ART"
+
+            if echo "${APP_VERSION}" | grep -qi "SNAPSHOT"; then
+              REPO_URL="${NEXUS_SNAPSHOTS_URL}"
+              echo "Version SNAPSHOT → Dépôt: ${REPO_URL}"
+            else
+              REPO_URL="${NEXUS_RELEASES_URL}"
+              echo "Version RELEASE → Dépôt: ${REPO_URL}"
+            fi
+
+            echo "Création d’un settings.xml temporaire..."
+            cat > settings-nexus.xml <<EOF
 <settings>
   <servers>
     <server>
       <id>nexus</id>
-      <username>$NEXUS_USER</username>
-      <password>$NEXUS_PASS</password>
+      <username>${NEXUS_USER}</username>
+      <password>${NEXUS_PASS}</password>
     </server>
   </servers>
 </settings>
 EOF
 
-              mvn -B -U -s settings-nexus.xml deploy:deploy-file \
-                -Durl="${NEXUS_RELEASES_URL}" \
-                -DrepositoryId=nexus \
-                -Dfile="$ART" \
-                -DgroupId="${GROUP_ID}" \
-                -DartifactId="${APP_NAME}" \
-                -Dversion="${APP_VERSION}" \
-                -Dpackaging=jar \
-                -DgeneratePom=true \
-                -DretryFailedDeploymentCount=3
-            '''
-          }
+            echo "Déploiement de l’artefact dans Nexus..."
+            mvn -B -U -s settings-nexus.xml deploy:deploy-file \
+              -Durl="${REPO_URL}" \
+              -DrepositoryId=nexus \
+              -Dfile="$ART" \
+              -DgroupId="${GROUP_ID}" \
+              -DartifactId="${APP_NAME}" \
+              -Dversion="${APP_VERSION}" \
+              -Dpackaging=jar \
+              -DgeneratePom=true \
+              -DretryFailedDeploymentCount=3
+
+            echo "✅ Upload terminé."
+          '''
         }
       }
     }
 
     stage('Deploy to Tomcat') {
-      // On déploie uniquement si un WAR a été généré et si on est sur la branche main
       when {
         allOf {
           branch 'main'
@@ -422,25 +414,22 @@ EOF
       }
       steps {
         withCredentials([usernamePassword(credentialsId: env.TOMCAT_CRED_ID, usernameVariable: 'TC_USER', passwordVariable: 'TC_PASS')]) {
-          ansiColor('xterm') {
-            sh '''
-              set -e
-              WAR=$(ls target/*.war | head -1)
-              echo "WAR détecté: $WAR"
-              # Déploiement via Tomcat Manager (update=true pour remplacer si déjà présent)
-              curl -sS -u "$TC_USER:$TC_PASS" -T "$WAR" \
-                "${TOMCAT_MANAGER_URL}/deploy?path=/${APP_NAME}&update=true"
-              echo
-              echo "Déploiement demandé au Tomcat Manager."
-            '''
-          }
+          sh '''
+            set -e
+            WAR=$(ls target/*.war | head -1)
+            echo "WAR détecté: $WAR"
+            curl -sS -u "$TC_USER:$TC_PASS" -T "$WAR" \
+              "${TOMCAT_MANAGER_URL}/deploy?path=/${APP_NAME}&update=true"
+            echo "✅ Déploiement effectué sur Tomcat."
+          '''
         }
       }
     }
   }
 
   post {
-    success { echo 'Pipeline OK' }
-    failure { echo 'Pipeline failed - check Jenkins logs.' }
+    success { echo '✅ Pipeline terminé avec succès.' }
+    failure { echo '❌ Pipeline échoué — consulte les logs Jenkins.' }
   }
 }
+
