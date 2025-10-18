@@ -123,10 +123,10 @@ pipeline {
 
   tools { maven 'M2_HOME'; jdk 'JDK17' }
 
-  options {
-    timestamps()
-    ansiColor('xterm')
-  }
+  // options {
+  //   timestamps()
+  //   ansiColor('xterm')
+  // }
 
   environment {
     // URLs cibles
