@@ -7,7 +7,7 @@ pipeline {
     NEXUS_USER = "admin"
     NEXUS_PASS = "197123"
 
-    TOMCAT_URL = "http://admin:admin123@localhost:8090/manager/text"
+    TOMCAT_URL = "http://jenkins:jenkins123@localhost:8090/manager/text"
 
     SONARQUBE_NAME = "MySonarQubeServer"   // ex: MySonarQube (Configure System)
     APP_NAME = "country-service"
