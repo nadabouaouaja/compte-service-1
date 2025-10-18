@@ -73,6 +73,6 @@ pipeline {
 
   post {
     success { echo '✅ CI/CD terminé : Build, Tests, Sonarqube, Nexus, Tomcat.' }
-    failure { echo '❌ Échec — vois les logs de stages.' }
+    failure { echo '❌ Échec — vois les logs de stage.' }
   }
 }
