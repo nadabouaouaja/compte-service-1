@@ -1,6 +1,6 @@
 pipeline {
   agent any
-  tools { maven 'mymaven'; jdk 'jdk17' }
+  tools { maven 'M2_HOME'; jdk 'JDK17' }
 
   environment {
     NEXUS_URL = "http://localhost:8091/repository/maven-releases/"
@@ -72,7 +72,7 @@ pipeline {
   }
 
   post {
-    success { echo '✅ CI/CD terminé : Build, Tests, Sonar (sans Quality Gate), Nexus, Tomcat.' }
+    success { echo '✅ CI/CD terminé : Build, Tests, Sonarqube, Nexus, Tomcat.' }
     failure { echo '❌ Échec — vois les logs de stages.' }
   }
 }
