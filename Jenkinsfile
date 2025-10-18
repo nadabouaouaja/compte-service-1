@@ -298,7 +298,7 @@ pipeline {
     NEXUS_CRED_ID       = 'nexus-creds'  // Jenkins Credentials (user/password Nexus)
 
     // 🔹 Tomcat Manager (facultatif)
-    TOMCAT_CRED_ID      = tomcat-creds'
+    TOMCAT_CRED_ID      = 'tomcat-creds'
     TOMCAT_MANAGER_URL  = 'http://localhost:8090/manager/text'
 
     // 🔹 Projet
