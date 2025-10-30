@@ -639,7 +639,9 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         script {
-          kubeconfig(credentialsId: 'kubeconfig-file', serverUrl: '') {
+         kubeconfig(credentialsId: 'kubeconfig-file') {
+           sh 'kubectl get ns'
+ 
             sh "kubectl apply -f service.yaml"
             sh "kubectl apply -f deployment.yaml"
             sh "kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record"
