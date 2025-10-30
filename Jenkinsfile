@@ -615,16 +615,20 @@ pipeline {
     }
 
     stage('Build & Push Docker Image') {
-      steps {
-        script {
-          sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
-          withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'DOCKERHUB_PWD')]) {
-            sh 'echo "$DOCKERHUB_PWD" | docker login -u nadabj --password-stdin'
-          }
-          sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
-        }
+  steps {
+    script {
+      sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
+      withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+        sh '''
+          echo "🔑 Logging in to DockerHub..."
+          echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+        '''
       }
+      sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
     }
+  }
+}
+
 
     stage('Test K8s connection') {
       steps {
