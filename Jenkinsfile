@@ -598,7 +598,7 @@
 
 pipeline {
   agent any
-  tools { maven 'mymaven' }
+  tools { maven 'M2_HOME' }
 
   stages {
 
