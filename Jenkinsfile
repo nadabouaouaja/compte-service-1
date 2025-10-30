@@ -604,7 +604,7 @@ pipeline {
 
     stage('Checkout code') {
       steps {
-        git branch: 'master', url: 'https://github.com/nadabj/my-country-service-1.git'
+        git branch: 'master', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
       }
     }
 
