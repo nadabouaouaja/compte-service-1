@@ -598,7 +598,11 @@
 
 pipeline {
   agent any
-  tools { maven 'M2_HOME' }
+
+  tools {
+    // Ce nom doit exister dans Manage Jenkins > Global Tool Configuration
+    maven 'M2_HOME'
+  }
 
   stages {
 
@@ -615,48 +619,81 @@ pipeline {
     }
 
     stage('Build & Push Docker Image') {
-  steps {
-    script {
-      sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
-      withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-        sh '''
-          echo "🔑 Logging in to DockerHub..."
-          echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-        '''
-      }
-      sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
-    }
-  }
-}
+      steps {
+        script {
+          sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
 
+          withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )]) {
+            sh '''
+              echo "🔑 Logging in to DockerHub..."
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            '''
+          }
+
+          sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
+        }
+      }
+    }
 
     stage('Test K8s connection') {
       steps {
-        // IMPORTANT : pas de serverUrl ici
-        withKubeConfig([credentialsId: 'kubeconfig-file']) {
-          sh 'kubectl get nodes'   // ou bat 'kubectl get nodes' si Jenkins est Windows natif
+        // La cred doit être de type "Secret file" (ID: kubeconfig-file) vers C:\Users\nada\.kube\config
+        withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+          sh '''
+            set -e
+
+            # 1) Copie le kubeconfig brut
+            cp "$KCFG" kubeconfig.windows.yaml
+
+            # 2) Convertit les chemins Windows -> WSL (/mnt/c/...)
+            sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
+
+            # 3) Aplatit (embarque certs/clefs)
+            kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
+
+            # 4) Sanity checks
+            echo "🔎 Vérif: pas de C:\\ dans le fichier final"
+            ! grep -qE "C:\\\\\\" kubeconfig.yaml || (echo "❌ C:\\ détecté dans kubeconfig.yaml" && exit 1)
+            echo "🔎 Vérif: pas de références à certificate-authority/client-certificate/client-key (fichiers)"
+            ! grep -qE "certificate-authority:|client-certificate:|client-key:" kubeconfig.yaml || (echo "❌ Références fichier détectées" && exit 1)
+
+            # 5) Utilisation
+            export KUBECONFIG="$PWD/kubeconfig.yaml"
+            kubectl config current-context
+            kubectl get nodes
+          '''
         }
       }
     }
 
     stage('Deploy to Kubernetes') {
       steps {
-        script {
-          withKubeConfig([credentialsId: 'kubeconfig-file']) {
-            sh 'kubectl get ns'
-            sh "kubectl apply -f service.yaml"
-            sh "kubectl apply -f deployment.yaml"
-            sh "kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record"
-            sh "kubectl rollout status deployment/my-country-service --timeout=120s"
-            sh "kubectl get pods -o wide"
-            sh "kubectl get svc my-country-service -o wide"
-          }
+        withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+          sh '''
+            set -e
+
+            # Reprise des étapes pour s'assurer du bon KUBECONFIG (si changement d'agent)
+            cp "$KCFG" kubeconfig.windows.yaml
+            sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
+            kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
+            export KUBECONFIG="$PWD/kubeconfig.yaml"
+
+            kubectl get ns
+            kubectl apply -f service.yaml
+            kubectl apply -f deployment.yaml
+            kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record
+            kubectl rollout status deployment/my-country-service --timeout=120s
+            kubectl get pods -o wide
+            kubectl get svc my-country-service -o wide
+          '''
         }
       }
     }
-  }
-}
 
-
-
+  } // fin stages
+} // fin pipeline
 
