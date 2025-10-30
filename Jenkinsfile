@@ -610,7 +610,7 @@ pipeline {
 
     stage('Build Maven') {
       steps {
-        sh 'mvn clean install -DskipTests'
+        sh 'mvn -B clean install -DskipTests'
       }
     }
 
@@ -626,22 +626,20 @@ pipeline {
       }
     }
 
-    // 🧩 <-- C’est ici qu’on ajoute ton stage de test
     stage('Test K8s connection') {
       steps {
-        kubeconfig(credentialsId: 'kubeconfig-file', serverUrl: '') {
-          sh 'kubectl get nodes'   // ou bat 'kubectl get nodes' si Jenkins tourne sous Windows pur
+        // IMPORTANT : pas de serverUrl ici
+        withKubeConfig([credentialsId: 'kubeconfig-file']) {
+          sh 'kubectl get nodes'   // ou bat 'kubectl get nodes' si Jenkins est Windows natif
         }
       }
     }
 
-    // 🚀 Ensuite vient le déploiement
     stage('Deploy to Kubernetes') {
       steps {
         script {
-         kubeconfig(credentialsId: 'kubeconfig-file') {
-           sh 'kubectl get ns'
- 
+          withKubeConfig([credentialsId: 'kubeconfig-file']) {
+            sh 'kubectl get ns'
             sh "kubectl apply -f service.yaml"
             sh "kubectl apply -f deployment.yaml"
             sh "kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record"
