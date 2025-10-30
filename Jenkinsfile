@@ -453,91 +453,148 @@
 
 
 
+// pipeline {
+//   agent any
+
+//   tools {
+//     maven 'M2_HOME'      // ton installation Maven dans Jenkins
+//     jdk 'JDK17'          // ton installation Java
+//   }
+
+//   environment {
+//     APP_NAME = "country-service"
+//     APP_VERSION = "1.0.0"
+//     GROUP_ID = "com.example"
+
+//     NEXUS_URL = "http://localhost:8091/repository/maven-releases/"
+//     NEXUS_USER = "admin"
+//     NEXUS_PASS = "197123"
+
+//     DEPLOY_HOST = "localhost"    // serveur cible (ou même Jenkins lui-même)
+//     DEPLOY_PATH = "/opt/apps"    // dossier de déploiement sur le serveur
+//   }
+
+//   stages {
+
+//     stage('Checkout') {
+//       steps {
+//         git branch: 'main', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
+//       }
+//     }
+
+//     stage('Build & Test (H2 en mémoire)') {
+//       steps {
+//         sh '''
+//           mvn -B clean test \
+//             -Dspring.datasource.url="jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE" \
+//             -Dspring.datasource.driver-class-name=org.h2.Driver \
+//             -Dspring.datasource.username=sa \
+//             -Dspring.jpa.hibernate.ddl-auto=update \
+//             -Dspring.jpa.database-platform=org.hibernate.dialect.MySQLDialect \
+//             -Dspring.sql.init.mode=never
+//           mvn -B -DskipTests package
+//         '''
+//       }
+//       post {
+//         always {
+//           junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+//         }
+//       }
+//     }
+
+//     stage('Upload to Nexus') {
+//       steps {
+//         sh '''
+//           ART=$(ls target/*.jar | head -1)
+//           echo "Uploading $ART to Nexus..."
+//           mvn -B deploy:deploy-file \
+//             -Durl=${NEXUS_URL} -DrepositoryId=nexus \
+//             -Dfile=$ART \
+//             -DgroupId=${GROUP_ID} -DartifactId=${APP_NAME} -Dversion=${APP_VERSION} \
+//             -Dpackaging=jar -DgeneratePom=true \
+//             -Dusername=${NEXUS_USER} -Dpassword=${NEXUS_PASS}
+//         '''
+//       }
+//     }
+
+//     stage('Deploy to Tomcat (Spring Boot JAR)') {
+//       steps {
+//         sh '''
+//           echo "Deploying JAR locally on ${DEPLOY_HOST}"
+//           ART=$(ls target/*.jar | head -1)
+
+//           # On copie le JAR vers le répertoire de déploiement
+//           mkdir -p ${DEPLOY_PATH}
+//           cp $ART ${DEPLOY_PATH}/${APP_NAME}.jar
+
+//           # On redémarre le service
+//           pkill -f "${APP_NAME}.jar" || true
+//           nohup java -jar ${DEPLOY_PATH}/${APP_NAME}.jar > ${DEPLOY_PATH}/${APP_NAME}.log 2>&1 &
+//           echo "Application démarrée sur $(hostname)"
+//         '''
+//       }
+//     }
+//   }
+
+//   post {
+//     success { echo 'Pipeline terminé avec succès ✅' }
+//     failure { echo 'Pipeline échoué ❌' }
+//   }
+// }
+
+
 pipeline {
   agent any
-
-  tools {
-    maven 'M2_HOME'      // ton installation Maven dans Jenkins
-    jdk 'JDK17'          // ton installation Java
-  }
-
-  environment {
-    APP_NAME = "country-service"
-    APP_VERSION = "1.0.0"
-    GROUP_ID = "com.example"
-
-    NEXUS_URL = "http://localhost:8091/repository/maven-releases/"
-    NEXUS_USER = "admin"
-    NEXUS_PASS = "197123"
-
-    DEPLOY_HOST = "localhost"    // serveur cible (ou même Jenkins lui-même)
-    DEPLOY_PATH = "/opt/apps"    // dossier de déploiement sur le serveur
-  }
+  tools { maven 'mymaven' }
 
   stages {
-
-    stage('Checkout') {
+    stage('Checkout code') {
       steps {
-        git branch: 'main', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
+        // Si ta branche est 'main', remplace 'master' par 'main'
+        git branch: 'master', url: 'https://github.com/nadabj/my-country-service-1.git'
       }
     }
 
-    stage('Build & Test (H2 en mémoire)') {
+    stage('Build Maven') {
       steps {
-        sh '''
-          mvn -B clean test \
-            -Dspring.datasource.url="jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE" \
-            -Dspring.datasource.driver-class-name=org.h2.Driver \
-            -Dspring.datasource.username=sa \
-            -Dspring.jpa.hibernate.ddl-auto=update \
-            -Dspring.jpa.database-platform=org.hibernate.dialect.MySQLDialect \
-            -Dspring.sql.init.mode=never
-          mvn -B -DskipTests package
-        '''
+        sh 'mvn clean install -DskipTests'
       }
-      post {
-        always {
-          junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+    }
+
+    stage('Build & Push Docker Image') {
+      steps {
+        script {
+          sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
+
+          // Option + sécurisé (password-stdin). L'actuel marche aussi.
+          withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'DOCKERHUB_PWD')]) {
+            sh 'echo "$DOCKERHUB_PWD" | docker login -u nadabj --password-stdin'
+          }
+
+          sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
         }
       }
     }
 
-    stage('Upload to Nexus') {
+    stage('Deploy to Kubernetes') {
       steps {
-        sh '''
-          ART=$(ls target/*.jar | head -1)
-          echo "Uploading $ART to Nexus..."
-          mvn -B deploy:deploy-file \
-            -Durl=${NEXUS_URL} -DrepositoryId=nexus \
-            -Dfile=$ART \
-            -DgroupId=${GROUP_ID} -DartifactId=${APP_NAME} -Dversion=${APP_VERSION} \
-            -Dpackaging=jar -DgeneratePom=true \
-            -Dusername=${NEXUS_USER} -Dpassword=${NEXUS_PASS}
-        '''
+        script {
+          kubeconfig(credentialsId: 'kubeconfig-file', serverUrl: '') {
+            sh "kubectl apply -f service.yaml"
+            sh "kubectl apply -f deployment.yaml"
+
+            // ← simplifiée, une seule ligne
+            sh "kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record"
+
+            sh "kubectl rollout status deployment/my-country-service --timeout=120s"
+            sh "kubectl get pods -o wide"
+            sh "kubectl get svc my-country-service -o wide"
+          }
+        }
       }
     }
-
-    stage('Deploy to Tomcat (Spring Boot JAR)') {
-      steps {
-        sh '''
-          echo "Deploying JAR locally on ${DEPLOY_HOST}"
-          ART=$(ls target/*.jar | head -1)
-
-          # On copie le JAR vers le répertoire de déploiement
-          mkdir -p ${DEPLOY_PATH}
-          cp $ART ${DEPLOY_PATH}/${APP_NAME}.jar
-
-          # On redémarre le service
-          pkill -f "${APP_NAME}.jar" || true
-          nohup java -jar ${DEPLOY_PATH}/${APP_NAME}.jar > ${DEPLOY_PATH}/${APP_NAME}.log 2>&1 &
-          echo "Application démarrée sur $(hostname)"
-        '''
-      }
-    }
-  }
-
-  post {
-    success { echo 'Pipeline terminé avec succès ✅' }
-    failure { echo 'Pipeline échoué ❌' }
   }
 }
+
+
+
