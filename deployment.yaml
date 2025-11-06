@@ -17,4 +17,4 @@ spec:
         image: nadabj/my-country-service-1:v1
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8082
+        - containerPort: 8086
