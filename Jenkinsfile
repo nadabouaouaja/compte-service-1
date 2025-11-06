@@ -596,104 +596,149 @@
 //   }
 // }
 
+// pipeline {
+//   agent any
+
+//   tools {
+//     // Ce nom doit exister dans Manage Jenkins > Global Tool Configuration
+//     maven 'M2_HOME'
+//   }
+
+//   stages {
+
+//     stage('Checkout code') {
+//       steps {
+//         git branch: 'main', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
+//       }
+//     }
+
+//     stage('Build Maven') {
+//       steps {
+//         sh 'mvn -B clean install -DskipTests'
+//       }
+//     }
+
+//     stage('Build & Push Docker Image') {
+//       steps {
+//         script {
+//           sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
+
+//           withCredentials([usernamePassword(
+//             credentialsId: 'dockerhub-creds',
+//             usernameVariable: 'DOCKER_USER',
+//             passwordVariable: 'DOCKER_PASS'
+//           )]) {
+//             sh '''
+//               echo "🔑 Logging in to DockerHub..."
+//               echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+//             '''
+//           }
+
+//           sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
+//         }
+//       }
+//     }
+
+//     stage('Test K8s connection') {
+//       steps {
+//         // La cred doit être de type "Secret file" (ID: kubeconfig-file) vers C:\Users\nada\.kube\config
+//         withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+//           sh '''
+//             set -e
+
+//             # 1) Copie le kubeconfig brut
+//             cp "$KCFG" kubeconfig.windows.yaml
+
+//             # 2) Convertit les chemins Windows -> WSL (/mnt/c/...)
+//             sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
+
+//             # 3) Aplatit (embarque certs/clefs)
+//             kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
+
+//             # 4) Sanity checks
+//             echo "🔎 Vérif: pas de C:\\ dans le fichier final"
+//             ! grep -qE "C:\\\\\\" kubeconfig.yaml || (echo "❌ C:\\ détecté dans kubeconfig.yaml" && exit 1)
+//             echo "🔎 Vérif: pas de références à certificate-authority/client-certificate/client-key (fichiers)"
+//             ! grep -qE "certificate-authority:|client-certificate:|client-key:" kubeconfig.yaml || (echo "❌ Références fichier détectées" && exit 1)
+
+//             # 5) Utilisation
+//             export KUBECONFIG="$PWD/kubeconfig.yaml"
+//             kubectl config current-context
+//             kubectl get nodes
+//           '''
+//         }
+//       }
+//     }
+
+//     stage('Deploy to Kubernetes') {
+//       steps {
+//         withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+//           sh '''
+//             set -e
+
+//             # Reprise des étapes pour s'assurer du bon KUBECONFIG (si changement d'agent)
+//             cp "$KCFG" kubeconfig.windows.yaml
+//             sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
+//             kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
+//             export KUBECONFIG="$PWD/kubeconfig.yaml"
+
+//             kubectl get ns
+//             kubectl apply -f service.yaml
+//             kubectl apply -f deployment.yaml
+//             kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record
+//             kubectl rollout status deployment/my-country-service --timeout=120s
+//             kubectl get pods -o wide
+//             kubectl get svc my-country-service -o wide
+//           '''
+//         }
+//       }
+//     }
+
+//   } // fin stages
+// } // fin pipeline
+
+
 pipeline {
-  agent any
+    agent any
 
-  tools {
-    // Ce nom doit exister dans Manage Jenkins > Global Tool Configuration
-    maven 'M2_HOME'
-  }
-
-  stages {
-
-    stage('Checkout code') {
-      steps {
-        git branch: 'main', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
-      }
+    tools {
+        maven 'M2_HOME'
     }
 
-    stage('Build Maven') {
-      steps {
-        sh 'mvn -B clean install -DskipTests'
-      }
-    }
+    stages {
 
-    stage('Build & Push Docker Image') {
-      steps {
-        script {
-          sh "docker build -t nadabj/my-country-service-1:${BUILD_NUMBER} ."
-
-          withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-creds',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-          )]) {
-            sh '''
-              echo "🔑 Logging in to DockerHub..."
-              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            '''
-          }
-
-          sh "docker push nadabj/my-country-service-1:${BUILD_NUMBER}"
+        stage('Checkout code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/nadabouaouaja/compte-service-1.git'
+            }
         }
-      }
-    }
 
-    stage('Test K8s connection') {
-      steps {
-        // La cred doit être de type "Secret file" (ID: kubeconfig-file) vers C:\Users\nada\.kube\config
-        withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
-          sh '''
-            set -e
-
-            # 1) Copie le kubeconfig brut
-            cp "$KCFG" kubeconfig.windows.yaml
-
-            # 2) Convertit les chemins Windows -> WSL (/mnt/c/...)
-            sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
-
-            # 3) Aplatit (embarque certs/clefs)
-            kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
-
-            # 4) Sanity checks
-            echo "🔎 Vérif: pas de C:\\ dans le fichier final"
-            ! grep -qE "C:\\\\\\" kubeconfig.yaml || (echo "❌ C:\\ détecté dans kubeconfig.yaml" && exit 1)
-            echo "🔎 Vérif: pas de références à certificate-authority/client-certificate/client-key (fichiers)"
-            ! grep -qE "certificate-authority:|client-certificate:|client-key:" kubeconfig.yaml || (echo "❌ Références fichier détectées" && exit 1)
-
-            # 5) Utilisation
-            export KUBECONFIG="$PWD/kubeconfig.yaml"
-            kubectl config current-context
-            kubectl get nodes
-          '''
+        stage('Build maven') {
+            steps {
+                sh 'mvn clean install'
+            }
         }
-      }
-    }
 
-    stage('Deploy to Kubernetes') {
-      steps {
-        withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
-          sh '''
-            set -e
-
-            # Reprise des étapes pour s'assurer du bon KUBECONFIG (si changement d'agent)
-            cp "$KCFG" kubeconfig.windows.yaml
-            sed -E 's#C:\\\\Users\\\\nada#\\/mnt\\/c\\/Users\\/nada#g; s#\\\\#/#g' kubeconfig.windows.yaml > kubeconfig.wsl.yaml
-            kubectl config view --raw --flatten --kubeconfig=kubeconfig.wsl.yaml > kubeconfig.yaml
-            export KUBECONFIG="$PWD/kubeconfig.yaml"
-
-            kubectl get ns
-            kubectl apply -f service.yaml
-            kubectl apply -f deployment.yaml
-            kubectl set image deployment/my-country-service country-service-container=nadabj/my-country-service-1:${BUILD_NUMBER} --record
-            kubectl rollout status deployment/my-country-service --timeout=120s
-            kubectl get pods -o wide
-            kubectl get svc my-country-service -o wide
-          '''
+        stage('Deploy using Ansible playbook') {
+            steps {
+                script {
+                    sh 'ansible-playbook -i hosts playbookCICD.yml --check'
+                }
+            }
         }
-      }
     }
 
-  } // fin stages
-} // fin pipeline
+    post {
+        always {
+            // Clean up or perform post-build actions
+            cleanWs()
+        }
+        success {
+            echo 'Ansible playbook executed successfully!'
+        }
+        failure {
+            echo 'Ansible playbook execution failed!'
+        }
+    }
+}
 
