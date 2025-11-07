@@ -1,3 +1,168 @@
+pipeline {
+  agent any
+
+  tools {
+    maven 'M2_HOME'          
+        
+  }
+
+  environment {
+    // >>>> adapte si besoin
+    GIT_URL    = 'https://github.com/nadabouaouaja/compte-service-1.git'
+    GIT_BRANCH = 'main'
+
+    DOCKERHUB_USER   = 'nadabj'            // <== ton user Docker Hub
+    IMAGE_NAME       = 'my-country-service'
+    IMAGE_TAG        = "${BUILD_NUMBER}"   // tag unique par build
+
+    // manifests K8s (dans le repo)
+    DEPLOYMENT_FILE  = 'deployment.yaml'
+    SERVICE_FILE     = 'service.yaml'
+
+    // playbook ansible (dans le repo)
+    PLAYBOOK         = 'playbookCICD.yml'
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        git branch: env.GIT_BRANCH, url: env.GIT_URL
+      }
+    }
+
+    stage('Build (Maven)') {
+      steps {
+        sh 'mvn clean package '
+      }
+    }
+
+    stage('Build Docker') {
+      steps {
+        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+      }
+    }
+
+    stage('Push Docker') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'dockerhub-creds',
+          usernameVariable: 'DH_USER',
+          passwordVariable: 'DH_PWD'
+        )]) {
+          sh """
+            echo "\$DH_PWD" | docker login -u "\$DH_USER" --password-stdin
+            docker tag ${IMAGE_NAME}:${IMAGE_TAG} \$DH_USER/${IMAGE_NAME}:${IMAGE_TAG}
+            docker push \$DH_USER/${IMAGE_NAME}:${IMAGE_TAG}
+          """
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes (kubectl)') {
+      steps {
+        withCredentials([file(credentialsId: 'k8s', variable: 'KCFG')]) {
+          sh """
+            export KUBECONFIG="\$KCFG"
+            # Optionnel : substituer l'image dynamiquement si le manifest est statique
+            # kubectl set image deployment/my-country-service \\
+            #   country-service-container=${DOCKERHUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} -n jenkins || true
+
+            kubectl apply -f ${DEPLOYMENT_FILE}
+            kubectl apply -f ${SERVICE_FILE}
+
+            echo "🧩 Contexte:" && kubectl config current-context
+            echo "📦 Pods:" && kubectl get pods -o wide -n jenkins || kubectl get pods -o wide
+            echo "🌐 Services:" && kubectl get svc -o wide -n jenkins || kubectl get svc -o wide
+          """
+        }
+      }
+    }
+
+    stage('deploy using Ansible') {
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PWD'),
+          file(credentialsId: 'k8s', variable: 'KCFG')
+        ]) {
+          sh """
+            export DOCKERHUB_USER="\$DOCKERHUB_USER"
+            export DOCKERHUB_PWD="\$DOCKERHUB_PWD"
+            export KUBECONFIG="\$KCFG"
+
+            # inventaire local implicite (localhost,)
+            ansible-playbook -i localhost, ${PLAYBOOK} \\
+              -e image_name='${IMAGE_NAME}' \\
+              -e image_tag='${IMAGE_TAG}' \\
+              -e dockerfile_path='.' 
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always  { cleanWs() }
+    success { echo "✅ OK — Build, Push, K8s (kubectl) & K8s (Ansible) exécutés avec l'image taggée ${IMAGE_TAG}." }
+    failure { echo "❌ Échec pipeline." }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // pipeline {
 //   agent any
 
