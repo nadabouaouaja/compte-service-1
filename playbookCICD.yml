@@ -10,7 +10,7 @@
     dockerfile_path: '.'                   # surchargé par -e
     # kubeconfig fourni par Jenkins (withCredentials:file)
     kubeconfig_path: "{{ lookup('env','KUBECONFIG') }}"
-    k8s_namespace: jenkins                 # change en 'default' si besoin
+    k8s_namespace: default                  # change en 'default' si besoin
 
   module_defaults:
     community.docker.docker_image:
