@@ -1,3 +1,61 @@
+---
+- name: Build and Deploy Docker Image to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    image_name: my-country-service         # surchargé par -e
+    image_tag: latest                      # surchargé par -e
+    dockerfile_path: '.'                   # surchargé par -e
+    # kubeconfig fourni par Jenkins (withCredentials:file)
+    kubeconfig_path: "{{ lookup('env','KUBECONFIG') }}"
+    k8s_namespace: jenkins                 # change en 'default' si besoin
+
+  module_defaults:
+    community.docker.docker_image:
+      source: build
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig_path }}"
+      context: docker-desktop
+
+  tasks:
+    - name: 🔐 Docker login (env DOCKERHUB_USER/DOCKERHUB_PWD)
+      community.general.docker_login:
+        username: "{{ lookup('env','DOCKERHUB_USER') }}"
+        password: "{{ lookup('env','DOCKERHUB_PWD') }}"
+        reauthorize: true
+
+    - name: 🏗️ Build Docker image
+      community.docker.docker_image:
+        build:
+          path: "{{ dockerfile_path }}"
+        name: "{{ lookup('env','DOCKERHUB_USER') }}/{{ image_name }}"
+        tag: "{{ image_tag }}"
+        state: present
+
+    - name: 🚀 Push Docker image
+      community.docker.docker_image:
+        name: "{{ lookup('env','DOCKERHUB_USER') }}/{{ image_name }}"
+        tag: "{{ image_tag }}"
+        push: true
+        source: local
+
+    - name: 📦 Apply Deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ k8s_namespace }}"
+        src: deployment.yaml
+
+    - name: 🌐 Apply Service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ k8s_namespace }}"
+        src: service.yaml
+
+
+
+
 # ---
 # - name: Build and Deploy Docker Image to Kubernetes
 #   hosts: localhost  # Or your build/deployment server
@@ -61,59 +119,61 @@
 #         src: service.yaml
 #         kubeconfig: "{{ kubeconfig_path }}"
 
----
-- name: Build and Deploy Docker Image to Kubernetes
-  hosts: localhost
-  connection: local
-  gather_facts: false
+# ---
+# - name: Build and Deploy Docker Image to Kubernetes
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
 
-  vars:
-    image_name: my-country-service
-    image_tag: v1
-    dockerfile_path: './'
+#   vars:
+#     image_name: my-country-service
+#     image_tag: v1
+#     dockerfile_path: './'
 
-    # Récupère le kubeconfig injecté par Jenkins (withCredentials:file)
-    kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') }}"
+#     # Récupère le kubeconfig injecté par Jenkins (withCredentials:file)
+#     kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') }}"
 
-  # Bon namespace pour les modules
-  module_defaults:
-    community.docker.docker_image:
-      source: build
-    kubernetes.core.k8s:
-      kubeconfig: "{{ kubeconfig_path }}"
-      context: docker-desktop
+#   # Bon namespace pour les modules
+#   module_defaults:
+#     community.docker.docker_image:
+#       source: build
+#     kubernetes.core.k8s:
+#       kubeconfig: "{{ kubeconfig_path }}"
+#       context: docker-desktop
 
-  tasks:
-    - name: 🔐 Docker login (via variables d'env DOCKERHUB_USER/DOCKERHUB_PWD)
-      community.general.docker_login:
-        username: "{{ lookup('env', 'DOCKERHUB_USER') }}"
-        password: "{{ lookup('env', 'DOCKERHUB_PWD') }}"
-        reauthorize: true
+#   tasks:
+#     - name: 🔐 Docker login (via variables d'env DOCKERHUB_USER/DOCKERHUB_PWD)
+#       community.general.docker_login:
+#         username: "{{ lookup('env', 'DOCKERHUB_USER') }}"
+#         password: "{{ lookup('env', 'DOCKERHUB_PWD') }}"
+#         reauthorize: true
 
-    - name: 🏗️ Build Docker image
-      community.docker.docker_image:
-        build:
-          path: "{{ dockerfile_path }}"
-        name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
-        tag: "{{ image_tag }}"
-        state: present
+#     - name: 🏗️ Build Docker image
+#       community.docker.docker_image:
+#         build:
+#           path: "{{ dockerfile_path }}"
+#         name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
+#         tag: "{{ image_tag }}"
+#         state: present
 
-    - name: 🚀 Push Docker image
-      community.docker.docker_image:
-        name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
-        tag: "{{ image_tag }}"
-        push: true
-        source: local
+#     - name: 🚀 Push Docker image
+#       community.docker.docker_image:
+#         name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
+#         tag: "{{ image_tag }}"
+#         push: true
+#         source: local
 
-    - name: 📦 Déploiement K8s - Deployment
-      kubernetes.core.k8s:
-        state: present
-        namespace: jenkins
-        src: deployment.yaml
+#     - name: 📦 Déploiement K8s - Deployment
+#       kubernetes.core.k8s:
+#         state: present
+#         namespace: jenkins
+#         src: deployment.yaml
 
-    - name: 🌐 Déploiement K8s - Service
-      kubernetes.core.k8s:
-        state: present
-        namespace: jenkins
-        src: service.yaml
+#     - name: 🌐 Déploiement K8s - Service
+#       kubernetes.core.k8s:
+#         state: present
+#         namespace: jenkins
+#         src: service.yaml
+
+
 
