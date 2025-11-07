@@ -9,7 +9,7 @@
     dockerfile_path: './'
     docker_registry_username: "nadabj"
     docker_registry_password: "197197123"
-    kubeconfig_path: "config"
+    kubeconfig_path: "kubeconfig_docker_desktop"
 
   tasks:
 
