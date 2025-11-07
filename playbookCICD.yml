@@ -5,9 +5,9 @@
   gather_facts: false
 
   vars:
-    image_name: my-country-service         # surchargé par -e
-    image_tag: latest                      # surchargé par -e
-    dockerfile_path: '.'                   # surchargé par -e
+    image_name: my-country-service         
+    image_tag: latest                     
+    dockerfile_path: '.'                   
     # kubeconfig fourni par Jenkins (withCredentials:file)
     kubeconfig_path: "{{ lookup('env','KUBECONFIG') }}"
     k8s_namespace: default                  # change en 'default' si besoin
@@ -52,128 +52,6 @@
         state: present
         namespace: "{{ k8s_namespace }}"
         src: service.yaml
-
-
-
-
-# ---
-# - name: Build and Deploy Docker Image to Kubernetes
-#   hosts: localhost  # Or your build/deployment server
-#   connection: local
-
-#   vars:
-#     image_name: my-country-service
-#     image_tag: v1
-#     dockerfile_path: './'
-#     docker_registry_username: "nadabj"
-#     docker_registry_password: "197197123"
-#     kubeconfig_path: "kubeconfig_docker_desktop"
-
-#   tasks:
-
-#     # 1️⃣ Connexion à Docker Hub
-#     - name: Log in to Docker Hub
-#       community.general.docker_login:
-#         username: "{{ docker_registry_username }}"
-#         password: "{{ docker_registry_password }}"
-#         reauthorize: yes
-
-#     # 2️⃣ Construction de l’image Docker
-#     - name: Build Docker image
-#       docker_image:
-#         build:
-#           path: "{{ dockerfile_path }}"
-#         name: "{{ docker_registry_username }}/{{ image_name }}"
-#         tag: "{{ image_tag }}"
-#         source: build
-#         state: present
-
-#     # 3️⃣ Pousser l’image vers Docker Hub
-#     - name: Push the Docker image to Docker Hub
-#       docker_image:
-#         name: "{{ docker_registry_username }}/{{ image_name }}"
-#         tag: "{{ image_tag }}"
-#         push: yes
-#         source: local
-
-#     # # 4️⃣ (Optionnel) Retélécharger l’image pour vérification
-#     # - name: Pull Docker image (optional, for verification or target nodes)
-#     #   docker_image:
-#     #     name: "{{ docker_registry_username }}/{{ image_name }}"
-#     #     tag: "{{ image_tag }}"
-#     #     source: pull
-
-#     # 5️⃣ Appliquer le Deployment sur Kubernetes
-#     - name: Apply Kubernetes Deployment
-#       kubernetes.core.k8s:
-#         state: present
-#         namespace: jenkins
-#         src: deployment.yaml
-#         kubeconfig: "{{ kubeconfig_path }}"
-
-#     # 6️⃣ Appliquer le Service sur Kubernetes
-#     - name: Apply Kubernetes Service
-#       kubernetes.core.k8s:
-#         state: present
-#         namespace: jenkins
-#         src: service.yaml
-#         kubeconfig: "{{ kubeconfig_path }}"
-
-# ---
-# - name: Build and Deploy Docker Image to Kubernetes
-#   hosts: localhost
-#   connection: local
-#   gather_facts: false
-
-#   vars:
-#     image_name: my-country-service
-#     image_tag: v1
-#     dockerfile_path: './'
-
-#     # Récupère le kubeconfig injecté par Jenkins (withCredentials:file)
-#     kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') }}"
-
-#   # Bon namespace pour les modules
-#   module_defaults:
-#     community.docker.docker_image:
-#       source: build
-#     kubernetes.core.k8s:
-#       kubeconfig: "{{ kubeconfig_path }}"
-#       context: docker-desktop
-
-#   tasks:
-#     - name: 🔐 Docker login (via variables d'env DOCKERHUB_USER/DOCKERHUB_PWD)
-#       community.general.docker_login:
-#         username: "{{ lookup('env', 'DOCKERHUB_USER') }}"
-#         password: "{{ lookup('env', 'DOCKERHUB_PWD') }}"
-#         reauthorize: true
-
-#     - name: 🏗️ Build Docker image
-#       community.docker.docker_image:
-#         build:
-#           path: "{{ dockerfile_path }}"
-#         name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
-#         tag: "{{ image_tag }}"
-#         state: present
-
-#     - name: 🚀 Push Docker image
-#       community.docker.docker_image:
-#         name: "{{ lookup('env', 'DOCKERHUB_USER') }}/{{ image_name }}"
-#         tag: "{{ image_tag }}"
-#         push: true
-#         source: local
-
-#     - name: 📦 Déploiement K8s - Deployment
-#       kubernetes.core.k8s:
-#         state: present
-#         namespace: jenkins
-#         src: deployment.yaml
-
-#     - name: 🌐 Déploiement K8s - Service
-#       kubernetes.core.k8s:
-#         state: present
-#         namespace: jenkins
-#         src: service.yaml
 
 
 
