@@ -9,5 +9,5 @@ spec:
   ports:
   - port: 8086
     targetPort: 8086
-    nodePort: 30008
+    # nodePort: 30008
     protocol: TCP
