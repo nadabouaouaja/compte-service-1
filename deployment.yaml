@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: country-service-container
-          image: nadabj/my-country-service-1:v1   # on peut laisser comme ça pour l’instant
+          image: nadabj/my-country-service-1:v1
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8086
+            - containerPort: 8086   # Port interne Spring Boot
