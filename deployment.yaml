@@ -13,8 +13,8 @@ spec:
         app: country-service
     spec:
       containers:
-      - name: country-service-container
-        image: nadabj/my-country-service-1:v1
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8086
+        - name: country-service-container
+          image: nadabj/my-country-service-1:v1   # on peut laisser comme ça pour l’instant
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
